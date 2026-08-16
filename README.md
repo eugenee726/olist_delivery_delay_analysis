@@ -1,8 +1,12 @@
 # Olist 고객만족(KPI) 기반 배송지연 원인 분석
 
+> 🇬🇧 [English README](README.en.md)
+
 > 재구매가 낮은 Olist에서 **재방문의 선행지표인 리뷰(KPI)를 좌우하는 핵심 요인을 진단**하고, 데이터 기반 마케팅 개선 방향을 도출한 데이터 분석 프로젝트
 
 **`DBeaver` · `MySQL` · `Python (Pandas, SciPy, Seaborn)` · `Tableau`**
+
+**📊 [Tableau Public에서 인터랙티브 대시보드 보기](https://public.tableau.com/app/profile/yujin.park5440/viz/olist_project_17861784755450/conclusion)** — RFM 세분화 · 고객 만족도 · 장기 배송 분석
 
 ---
 
@@ -51,10 +55,31 @@ EDA로 도출한 배송 기간과 만족도 간의 관계를 기반으로 두 �
 - `order_id`·`customer_unique_id` 기준 테이블 관계를 파악하고, 카테고리·결제금액·지역별 주문·**지역별 배송지연율**을 비교분석.
 
 **데이터마트 설계**
-- 분석 목적(RFM 세그먼트 × 배송·리뷰 상관관계)에 맞춰 **9개 원본 테이블을 JOIN**하고, 배송 소요 시간을 **승인 → 발송 → 운송 → 도착 4구간으로 분해**해 병목 추적이 가능한 목적별 마트를 설계.
-- 조인 전 **`order_id` PK 유일성과 orders:items 1:N 카디널리티를 검증**하고, 고객 집계는 **`customer_unique_id`** 기준으로 정합성 확보.
-- **타임스탬프 결측·이상치(transit=0·음수) 제거, 관측기간 절단 편향 제거, 분석 단위별 중복 제거**로 품질 관리.
-- 모든 마트를 **동일 관측 기간·동일 키**로 통일해 마트 간 값이 어긋나지 않도록 함.
+
+9개 원본을 **단일 팩트(`fact_order`)에서 파생되는 목적별 마트**로 구성(SSOT). SQL이 집계·정제를, Tableau가 관계 결합·시각화를 담당하는 실무형 BI 구조.
+
+*아키텍처 — 스타 스키마 (1 팩트 + 마트 5종)*
+
+| 마트 | Grain | 대시보드 | 핵심 SQL |
+|---|---|---|---|
+| **fact_order** | order_id | (중심) | 9-JOIN, 1:N collapse, 배송 4구간 분해 |
+| dim_customer_rfm | customer_unique_id | RFM | `NTILE(10)`·`ROW_NUMBER()` |
+| agg_review_score | review_score | 만족도(표) | `CASE` 집계 |
+| agg_monthly | 월 | 월별 추이 | `DATE_FORMAT` |
+| agg_state | state | 지도 | 고객·판매자 통합 집계 |
+| dim_seller | seller_id | 판매자 분포 | Haversine 좌표 조인 |
+
+*핵심 설계 및 데이터 정합성·품질 검증*
+- **그레인 통일:** 배송·리뷰·취소가 모두 주문 단위 사건이므로 팩트를 `order_id`로 고정하고, RFM만 `customer_unique_id`로 롤업.
+- **1:N 카디널리티 처리:** orders : items = 1 : N을 주문 단위로 접어 `order_id` **PK 유일성 검증**(고아 주문 0건).
+- **배송 4구간 분해:** 승인 → 발송 → 운송 → 도착으로 나눠 병목(운송 85%) 추적.
+- **블렌드 제거:** 지도의 고객·판매자 수를 `agg_state`에서 사전 통합해 단일 소스로 구현.
+- **fan-out 방지:** 그레인이 다른 마트는 물리 조인 대신 **Tableau 관계(논리적 계층)**로 결합해 집계 뻥튀기 차단.
+- **정합성 검증:** 행 수 대조 시 차이 28건은 **복수 주(state) 주문 고객**으로 확인(정상).
+- **품질 관리:** 이상치(운송 ≤ 0, 30건) 제외, 빈 타임스탬프 처리, 관측기간(2017-01-01~2018-06-30) 고정, RFM은 **배송완료 실구매 기준** 필터링.
+- **기준 명시:** 재구매율은 **2.98%(배송완료) / 3.04%(전체 주문)**로 분리 관리.
+
+전체 빌드 스크립트: [`01_sql/30_data_marts.sql`](01_sql/30_data_marts.sql)
 
 ### 2) 대시보드 및 발견 (Tableau)
 
@@ -172,11 +197,13 @@ EDA로 도출한 배송 기간과 만족도 간의 관계를 기반으로 두 �
 
 ```
 .
-├── README.md
+├── README.md            # 한국어
+├── README.en.md         # 영어
 ├── notebooks/
 │   └── olist_delivery_analysis.ipynb   # 배송지연 심층 진단 (Python)
-├── sql/                                # 데이터마트·EDA 쿼리
-├── data/                               # (원본은 Kaggle에서 별도 다운로드)
+├── sql/
+│   └── 30_data_marts.sql               # 데이터마트 빌드 스크립트
+└── data/                               # (원본은 Kaggle에서 별도 다운로드)
 ```
 
 ## 🔗 References

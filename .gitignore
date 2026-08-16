@@ -1,0 +1,9 @@
+notebooks/Python Analysis.ipynb
+notebooks/Delivery_Analysis.ipynb
+
+data/*.csv
+
+sql/datamart/
+sql/EDA/
+sql/RFM 세그먼트, 배송, 리뷰 관련 분석용 데이터 마트 생성.sql
+sql/이커머스 테이블 구조 및 EDA(탐색적 분석).sql
